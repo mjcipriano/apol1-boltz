@@ -24,7 +24,7 @@ RUN mkdir -p /root/.boltz && cd /root/.boltz \
 # ---------------------------------------------------------------- weights (local copy)
 FROM nvidia/cuda:${CUDA_TAG} AS weights-local
 COPY weights.sha256 /tmp/weights.sha256
-COPY weights/ /root/.boltz/
+COPY weights/boltz2_conf.ckpt weights/boltz2_aff.ckpt weights/mols.tar /root/.boltz/
 RUN cd /root/.boltz && sha256sum -c /tmp/weights.sha256
 
 # ---------------------------------------------------------------- weights (common post-processing)
@@ -64,13 +64,16 @@ RUN pip install --no-cache-dir "torch==${TORCH_VERSION}" --index-url "${TORCH_IN
  && find /opt/py -depth -type d -name __pycache__ -exec rm -rf {} + \
  && find /opt/py -depth -type d -name tests -path '*site-packages*' -exec rm -rf {} + || true
 
-# Boltz-2 weights + CCD, verified in the weights stage
-COPY --from=weights /root/.boltz /root/.boltz
+# Boltz-2 weights + CCD, verified in the weights stage. World-readable (and /root traversable) so the
+# container can run as an unprivileged user (--user $(id -u):$(id -g)) and bind-mounted outputs stay user-owned.
+COPY --from=weights --chmod=755 /root/.boltz /root/.boltz
+RUN chmod 755 /root
 
 # Programme scripts
 COPY scripts/ /opt/apol1/
 RUN chmod +x /opt/apol1/*.py && python -c "import boltz, torch; print('boltz ok, torch', torch.__version__)"
 
 WORKDIR /work
+RUN chmod 1777 /work
 ENV BOLTZ_CACHE=/root/.boltz
 CMD ["python", "/opt/apol1/boltz_batch.py"]

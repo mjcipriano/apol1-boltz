@@ -29,9 +29,12 @@ docker pull ghcr.io/mjcipriano/apol1-boltz:2.2.1     # or :latest
 
 ```bash
 cd /path/to/run_dir            # contains yaml/ and msa/ (or inputs.tar.gz, see layout below)
-docker run --rm --gpus all -v "$PWD":/work ghcr.io/mjcipriano/apol1-boltz:2.2.1 \
+docker run --rm --gpus all --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work ghcr.io/mjcipriano/apol1-boltz:2.2.1 \
     python /opt/apol1/boltz_batch.py
 ```
+
+`--user "$(id -u):$(id -g)"` keeps the files written to the bind mount owned by you instead of root (the weights under
+`/root/.boltz` are world-readable, `BOLTZ_CACHE` points at them). Omit it on Modal or when running as root is fine.
 
 `boltz_batch.py` is the exact programme pipeline: batches of `BOLTZ_BATCH` (default 8) YAMLs, `boltz predict … --cache /root/.boltz
 --diffusion_samples 3 --seed 42 --recycling_steps 3 --sampling_steps 200 --output_format mmcif --override --write_full_pae --no_kernels`.
@@ -81,7 +84,7 @@ run_dir/
 Build the YAMLs from a pairs CSV (columns `scfv`, `ag_seq`, optional `pair_id`; extra columns are carried through):
 
 ```bash
-docker run --rm -v "$PWD":/work ghcr.io/mjcipriano/apol1-boltz:2.2.1 python /opt/apol1/make_yaml.py pairs.csv
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/work ghcr.io/mjcipriano/apol1-boltz:2.2.1 python /opt/apol1/make_yaml.py pairs.csv
 # -> yaml/<pair_id>.yaml, unique_seqs.fasta, pairs_manifest.csv
 ```
 
@@ -92,7 +95,7 @@ MSA key `"S" + sha1(sequence)[:12]`, YAML `version: 1`, chain ids `A` (scFv) and
 
 ```bash
 # inside the container (CPU only, no --gpus needed) or with any Python >= 3.8 outside it (stdlib only)
-docker run --rm -v "$PWD":/work ghcr.io/mjcipriano/apol1-boltz:2.2.1 python /opt/apol1/msa_fetch_par.py
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/work ghcr.io/mjcipriano/apol1-boltz:2.2.1 python /opt/apol1/msa_fetch_par.py
 mv out/msa msa    # msa_fetch_par.py writes out/msa/<key>.a3m + out/msa_status.json; boltz_batch.py expects msa/
 ```
 
