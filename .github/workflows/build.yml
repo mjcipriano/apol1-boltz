@@ -1,0 +1,56 @@
+name: build-and-push-image
+# Manual rebuild of ghcr.io/mjcipriano/apol1-boltz. Downloads the Boltz-2 weights from the official
+# release (sha256-verified in the Dockerfile) and pushes :<tag> and :latest.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: image tag (boltz version)
+        default: "2.2.1"
+        required: true
+      torch_version:
+        description: torch version (cu124 wheel)
+        default: "2.5.1"
+        required: true
+      push_latest:
+        description: also tag :latest
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space (image is ~11 GB uncompressed)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune -af
+          df -h /
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            WEIGHTS_SOURCE=download
+            BOLTZ_VERSION=${{ inputs.tag }}
+            TORCH_VERSION=${{ inputs.torch_version }}
+          tags: |
+            ghcr.io/mjcipriano/apol1-boltz:${{ inputs.tag }}
+            ${{ inputs.push_latest && 'ghcr.io/mjcipriano/apol1-boltz:latest' || '' }}
+      - name: Smoke test
+        run: |
+          docker run --rm ghcr.io/mjcipriano/apol1-boltz:${{ inputs.tag }} bash -c "boltz predict --help >/dev/null && ls -la /root/.boltz && python -c 'import boltz, torch; print(torch.__version__)'"

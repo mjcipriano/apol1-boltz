@@ -1,0 +1,6 @@
+weights/*
+!weights/.gitkeep
+__pycache__/
+*.pyc
+/work/
+/out/
